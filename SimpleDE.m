@@ -1,5 +1,5 @@
 % ------------------ Simple Differential Evolution (DE) Algorithm ------------------
-% Objective Function used: Sphere function from CEC2017 Benchmark
+% Objective Function used: Sphere function
 
 % Differential Evolution consists of three main operators: mutation, crossover, and selection.
 %
