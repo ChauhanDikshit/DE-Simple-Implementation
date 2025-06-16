@@ -1,0 +1,209 @@
+% ------------------ Simple Differential Evolution (DE) Algorithm ------------------
+% Objective Function used: Sphere function from CEC2017 Benchmark
+
+% Differential Evolution consists of three main operators: mutation, crossover, and selection.
+%
+% Mutation (mathematical definition):
+% v_i = xr3 + F \cdot (xr1 - xr2) \]
+% Where \(v_i \) is the mutant vector, \( F \) is the scaling factor, and \( xr1, xr2, xr3 \) are randomly chosen individuals such that all indices are distinct and not equal to the current individual \( i \).
+%
+% Crossover (Binomial):
+%  u_{i,j} = \begin{cases}
+% v_{i,j} & \text{if } rand_j \leq CR \\
+% x_{i,j} & \text{otherwise}
+% \end{cases} \]
+% Where \( u_{i,j} \) is the trial vector, \( rand_j \) is a random number in [0,1] for the j-th component, and \( CR \) is the crossover rate.
+%
+% Selection:
+%  \mathbf{x}_i^{(t+1)} = \begin{cases}
+% \mathbf{u}_i & \text{if } f(\mathbf{u}_i) < f(\mathbf{x}_i) \\
+% \mathbf{x}_i & \text{otherwise}
+% \end{cases} \]
+% The selection step retains the better solution between the parent and the trial.
+
+clear all;
+clc;
+
+%% Problem Definition
+Run_no = 1;            % Number of independent runs
+nPop = 30;             % Population Size
+MaxIt = 2000;          % Maximum Number of Iterations
+% Total Function Evaluations = MaxIt * nPop = 60,000
+Dim = 30;              % Dimensionality of the problem (30D)
+VarSize = [1 Dim];     % Size of the decision variable
+LB = -30;              % Lower bound of each variable
+UB = 30;               % Upper bound
+
+objectiveFunction = @(x) Sphere(x);  % Define the objective function handle
+sAveFit = zeros(Run_no, MaxIt);      % Store convergence for each run
+
+%% DE parameters
+F = 0.5;     % Mutation factor
+Fmin = 0.4;  % (Not used here, but may be used in adaptive DE)
+CR = 0.9;    % Crossover probability
+
+for irun = 1:Run_no
+    disp(irun)
+
+    % Initialize global best
+    BestInd_fit = inf;   % Best fitness so far
+    BestInd = zeros(1, Dim);  % Best individual (solution vector)
+
+    % Define empty structure for individuals
+    empty_individual.Position = [];
+    empty_individual.Fitness = [];
+    empty_individual.Covergence_curve = [];
+    empty_individual.fit_old = [];
+    empty_individual.Position_old = [];
+
+    % Initialize the population array
+    pop = repmat(empty_individual, nPop, 1);
+
+    %% ------------ Initialize Population --------------------------
+    for i = 1:nPop
+        pop(i).Position = unifrnd(LB, UB, VarSize);  % Uniform random initialization
+    end
+
+    %% --------- Evaluate Fitness ---------
+    for i = 1:nPop
+        pop(i).Fitness = objectiveFunction(pop(i).Position);
+    end
+    %% --------- Elitism: Keep Previous Best if New is Worse ---------
+    for i = 1:nPop
+        pop(i).fit_old = pop(i).Fitness;
+        pop(i).Position_old = pop(i).Position;
+    end
+    %% --------- Update Best Solution Found ---------
+    for i = 1:nPop
+        if pop(i).Fitness < BestInd_fit
+            BestInd_fit = pop(i).Fitness;
+            BestInd = pop(i).Position;
+        end
+    end
+
+    %% ------------ Start DE iterations ----------------------------
+    for it = 1:MaxIt
+
+        %% --------- Mutation + Crossover (Binomial) ---------
+
+        %% Mutation (mathematical definition): DE/rand/1
+
+% vi = xr3 + F * (xr1 - xr2)
+% Where vi is the mutant vector, F is the scaling factor, and xr1, xr2, xr3 are randomly chosen individuals such that all indices are distinct and not equal to the current individual i.
+
+        for i = 1:nPop
+            % Choose 3 random and unique individuals different from i
+            r1 = i;
+            while r1 == i
+                r1 = randi([1 nPop]);
+            end
+            r2 = r1;
+            while r2 == r1 || r2 == i
+                r2 = randi([1 nPop]);
+            end
+            r3 = r2;
+            while r3 == r2 || r3 == r1 || r3 == i
+                r3 = randi([1 nPop]);
+            end
+
+            % Mutation: DE/rand/1
+            mutant = pop(r3).Position + F * (pop(r1).Position - pop(r2).Position);
+
+            % Boundary check for mutant
+            for d = 1:Dim
+                if mutant(d) > UB
+                    mutant(d) = UB;
+                elseif mutant(d) < LB
+                    mutant(d) = LB;
+                end
+            end
+
+            % Crossover: Binomial
+%  u_{i,j} =  v_{i,j} & if rand_j <= CR 
+% x_{i,j} & \otherwise
+
+% Where u_{i,j} is the trial vector, \rand_j is a random number in [0,1] for the j-th component, and CR is the crossover rate.
+%
+            randmask = rand(1, Dim) < CR;
+            invmask = ~randmask;
+            trial = invmask .* pop(i).Position + randmask .* mutant;
+
+            % Selection: replace parent with trial
+            pop(i).Position = trial;
+        end
+
+        %% --------- Boundary Handling ---------
+        for i = 1:nPop
+            % Ensure solutions are within the defined bounds
+            Flag4ub = pop(i).Position > UB;
+            Flag4lb = pop(i).Position < LB;
+            pop(i).Position = pop(i).Position .* (~(Flag4ub + Flag4lb)) ...
+                + UB .* Flag4ub + LB .* Flag4lb;
+        end
+
+        %% --------- Evaluate Fitness ---------
+        for i = 1:nPop
+            pop(i).Fitness = objectiveFunction(pop(i).Position);
+        end
+
+        %% --------- Elitism: Keep Previous Best if New is Worse ---------
+        for i = 1:nPop
+            if pop(i).fit_old < pop(i).Fitness
+                pop(i).Fitness = pop(i).fit_old;
+                pop(i).Position = pop(i).Position_old;
+            end
+        end
+
+        for i = 1:nPop
+            pop(i).Position_old = pop(i).Position;
+            pop(i).fit_old = pop(i).Fitness;
+        end
+
+        %% --------- Update Best Solution Found ---------
+        for i = 1:nPop
+            if pop(i).Fitness < BestInd_fit
+                BestInd_fit = pop(i).Fitness;
+                BestInd = pop(i).Position;
+            end
+        end
+        %% --------- Record Best Fitness in Convergence Curve ---------
+        Convergence_curve(irun, it) = BestInd_fit;
+
+        % Display iteration progress
+        disp(['Iteration ' num2str(it) ': Best Cost = ' num2str(BestInd_fit)]);
+
+        %% Only valid if Dim = 2
+        % for i = 1:nPop
+        %     swarm(i,1,1) = pop(i).Position(1);  % X-coordinate
+        %     swarm(i,1,2) = pop(i).Position(2);  % Y-coordinate
+        % end
+        % 
+        % clf
+        % plot(swarm(:, 1, 1), swarm(:, 1, 2), 'X')   % plot all individuals
+        % hold on;
+        % 
+        % [~, ind] = min([pop.Fitness]);  % find best individual index
+        % plot(swarm(ind,1,1),swarm(ind,1,2),'*r')    % plot best one in red
+        % axis([LB UB LB UB]);
+        % title(['\fontsize{12}\bf Iteration:',num2str(it)]);
+        % pause(0.2);
+
+    end
+
+    %% --------- Final Best Fitness for this Run ---------
+    if BestInd_fit < 1e-8
+        BestInd_fit = 0;  % for display clarity
+    end
+    disp(['Run no : ', num2str(irun)]);
+    disp(['The best optimal value is : ', num2str(BestInd_fit, 10)]);
+    Bestfit_run(1, irun) = BestInd_fit;
+    BestIndividual_run(irun, :) = BestInd;
+
+    %% --------- Plot Final Convergence Curve ---------
+    figure;
+    semilogy(Convergence_curve(irun, :), 'LineWidth', 2);
+    xlabel('Iteration');
+    ylabel('Best Cost (Log Scale)');
+    grid on;
+
+end
